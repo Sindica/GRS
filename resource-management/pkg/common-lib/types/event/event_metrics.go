@@ -70,32 +70,32 @@ func AddLatencyMetricsAllCheckpoints(e *NodeEvent) {
 	if !agg_received_time.IsZero() {
 		latencyMetricsAllCheckpoints.Aggregator_Received.AddLatencyMetrics(agg_received_time.Sub(lastUpdatedTime))
 	} else {
-		klog.Errorf("Event (%v, Id %s, RV %s) does not have %s stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Aggregator_Received)
+		klog.Errorf("Event (%v, Id %s, RV %s) does not have %v stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Aggregator_Received)
 	}
 	if !dis_received_time.IsZero() {
 		latencyMetricsAllCheckpoints.Distributor_Received.AddLatencyMetrics(dis_received_time.Sub(lastUpdatedTime))
 	} else {
-		klog.Errorf("Event (%v, Id %s, RV %s) does not have %s stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Distributor_Received)
+		klog.Errorf("Event (%v, Id %s, RV %s) does not have %v stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Distributor_Received)
 	}
 	if !dis_sending_time.IsZero() {
 		latencyMetricsAllCheckpoints.Distributor_Sending.AddLatencyMetrics(dis_sending_time.Sub(lastUpdatedTime))
 	} else {
-		klog.Errorf("Event (%v, Id %s, RV %s) does not have %s stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Distributor_Sending)
+		klog.Errorf("Event (%v, Id %s, RV %s) does not have %v stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Distributor_Sending)
 	}
 	if !dis_sent_time.IsZero() {
 		latencyMetricsAllCheckpoints.Distributor_Sent.AddLatencyMetrics(dis_sent_time.Sub(lastUpdatedTime))
 	} else {
-		klog.Errorf("Event (%v, Id %s, RV %s) does not have %s stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Distributor_Sent)
+		klog.Errorf("Event (%v, Id %s, RV %s) does not have %v stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Distributor_Sent)
 	}
 	if !serializer_encoded_time.IsZero() {
 		latencyMetricsAllCheckpoints.Serializer_Encoded.AddLatencyMetrics(serializer_encoded_time.Sub(lastUpdatedTime))
 	} else {
-		klog.Errorf("Event (%v, Id %s, RV %s) does not have %s stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Serializer_Encoded)
+		klog.Errorf("Event (%v, Id %s, RV %s) does not have %v stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Serializer_Encoded)
 	}
 	if !serializer_sent_time.IsZero() {
 		latencyMetricsAllCheckpoints.Serializer_Sent.AddLatencyMetrics(serializer_sent_time.Sub(lastUpdatedTime))
 	} else {
-		klog.Errorf("Event (%v, Id %s, RV %s) does not have %s stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Serializer_Sent)
+		klog.Errorf("Event (%v, Id %s, RV %s) does not have %v stamped", e.Type, e.Node.Id, e.Node.ResourceVersion, metrics.Serializer_Sent)
 	}
 	klog.V(6).Infof("[Metrics][Detail] node %v RV %s: %s: %v, %s: %v, %s: %v, %s: %v, %s: %v, %s: %v",
 		e.Node.Id, e.Node.ResourceVersion,
