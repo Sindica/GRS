@@ -252,6 +252,7 @@ func makeDataUpdate(changesThreshold int) {
 
 			count++
 			rvToGenerateRPs++
+			time.Sleep(1 * time.Second)
 		}
 		if nodeChangesPerRP > 0 {
 			CurrentRVs[rvLoc] = rvToGenerateRPs - 1
