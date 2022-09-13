@@ -97,8 +97,9 @@ func (w *WatchHandler) list(resp http.ResponseWriter, req *http.Request) {
 func (w *WatchHandler) serverWatch(resp http.ResponseWriter, req *http.Request, clientId string) {
 	klog.V(3).Infof("Serving watch for client: %s", clientId)
 
+	channelSize := 25000
 	// TODO: per perf test results, adjust the channel buffer size
-	watchCh := make(chan *event.NodeEvent, 1 /*ep.WatchChannelSize*/)
+	watchCh := make(chan *event.NodeEvent, channelSize /*ep.WatchChannelSize*/)
 	stopCh := make(chan struct{})
 
 	// Signal the distributor to stop the watch for this client on exit
@@ -138,6 +139,8 @@ func (w *WatchHandler) serverWatch(resp http.ResponseWriter, req *http.Request, 
 	flusher.Flush()
 
 	klog.V(3).Infof("Start processing watch event for client: %v", clientId)
+	i := 0
+	flushBatchSize := 100 // optimized for daily change pattern
 	for {
 		select {
 		case <-done:
@@ -157,8 +160,10 @@ func (w *WatchHandler) serverWatch(resp http.ResponseWriter, req *http.Request, 
 				return
 			}
 
-			if len(watchCh) == 0 {
+			i++
+			if i == flushBatchSize || len(watchCh) == 0 {
 				flusher.Flush()
+				i = 0
 			}
 		}
 	}
