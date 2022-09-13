@@ -143,10 +143,7 @@ func (a *Aggregator) watchNodes(client SimInterface, crv types.TransitResourceVe
 
 				klog.V(9).Infof("Got node event from region manager, nodeId: %v", record.Node.Id)
 
-				// TODO: refine this go routine to sub functions
-				go func() {
-					a.processNode(&record)
-				}()
+				a.processNode(&record)
 			}
 		}
 	}()
