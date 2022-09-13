@@ -140,7 +140,7 @@ func (w *WatchHandler) serverWatch(resp http.ResponseWriter, req *http.Request, 
 
 	klog.V(3).Infof("Start processing watch event for client: %v", clientId)
 	i := 0
-	flushBatchSize := 100 // optimized for daily change pattern
+	flushBatchSize := 10 // optimized for daily change pattern
 	for {
 		select {
 		case <-done:

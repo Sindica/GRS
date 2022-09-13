@@ -167,6 +167,7 @@ func (eq *NodeEventQueue) Watch(rvs types.InternalResourceVersionMap, clientWatc
 		}
 		// send init events
 		for i := 0; i < len(initEvents); i++ {
+			klog.Infof("debug: init events")
 			downstreamCh <- initEvents[i]
 		}
 

@@ -272,6 +272,8 @@ func (i *Installer) serverWatch(resp http.ResponseWriter, req *http.Request, cli
 	flusher.Flush()
 
 	klog.V(3).Infof("Start processing watch event for client: %v", clientId)
+	flushBatchSize := 10
+	n := 0
 	for {
 		select {
 		case <-done:
@@ -290,9 +292,11 @@ func (i *Installer) serverWatch(resp http.ResponseWriter, req *http.Request, cli
 				resp.WriteHeader(http.StatusInternalServerError)
 				return
 			}
+			n++
 			record.SetCheckpoint(metrics.Serializer_Encoded)
-			if len(watchCh) == 0 {
+			if n == flushBatchSize || len(watchCh) == 0 {
 				flusher.Flush()
+				n = 0
 			}
 			record.SetCheckpoint(metrics.Serializer_Sent)
 			event.AddLatencyMetricsAllCheckpoints(record)
