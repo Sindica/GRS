@@ -81,7 +81,7 @@ func MakeDataUpdate(data_pattern string, wait_time_for_make_rp_down int) {
 			for {
 				// At each minute mark, generate 10 modified node events
 				time.Sleep(1 * time.Minute)
-				makeDataUpdate(atEachMin10)
+				go makeDataUpdate(atEachMin10)
 
 				klog.V(3).Info("At each minute mark, generating 10 modified and added node events is completed")
 			}
