@@ -19,6 +19,7 @@ package storage
 import (
 	"k8s.io/klog/v2"
 	"math"
+	"sort"
 	"sync"
 
 	"global-resource-service/resource-management/pkg/common-lib/hash"
@@ -38,8 +39,8 @@ const (
 type VirtualNodeStore struct {
 	mu              sync.RWMutex
 	nodeEventByHash map[float64]*node.ManagedNodeEvent
-	lowerbound      float64
-	upperbound      float64
+	lowerbound      float64 // inclusive
+	upperbound      float64 // exclusive
 
 	// one virtual store can only have nodes from one resource partition
 	location location.Location
@@ -118,6 +119,47 @@ func (vs *VirtualNodeStore) GenerateBookmarkEvent() *node.ManagedNodeEvent {
 		return node.NewManagedNodeEvent(nodeEvent, n.GetLocation())
 	}
 	return nil
+}
+
+// Input requested host count
+// return pointer to new virtual node store - splitted from current virtual node store
+func (vs *VirtualNodeStore) Split(requestedHostCount int) *VirtualNodeStore {
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+	currentSize := len(vs.nodeEventByHash)
+	if currentSize <= requestedHostCount {
+		klog.Errorf("Requested to split virtual node when capacity (%d) is less than or equal to requested host count (%d)", currentSize, requestedHostCount)
+		return nil
+	}
+
+	nodeHashes := make([]float64, currentSize)
+	index := 0
+	for k, _ := range vs.nodeEventByHash {
+		nodeHashes[index] = k
+		index++
+	}
+	sort.Float64s(nodeHashes)
+	newUBoundForCurrentVS := nodeHashes[requestedHostCount]
+	vs.upperbound = newUBoundForCurrentVS
+
+	// create new virtual node store
+	newVSStore := &VirtualNodeStore{
+		mu:              sync.RWMutex{},
+		nodeEventByHash: make(map[float64]*node.ManagedNodeEvent, currentSize-requestedHostCount),
+		lowerbound:      newUBoundForCurrentVS,
+		upperbound:      vs.upperbound,
+		location:        vs.location,
+	}
+
+	// move nodes from existing vs to new vs
+	for i := requestedHostCount; i < currentSize; i++ {
+		nodeHashKey := nodeHashes[i]
+		newVSStore.nodeEventByHash[nodeHashKey] = vs.nodeEventByHash[nodeHashKey]
+		delete(vs.nodeEventByHash, nodeHashKey)
+	}
+
+	// TODO Add new virtual node into store
+	return newVSStore
 }
 
 type NodeStore struct {
