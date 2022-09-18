@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"k8s.io/klog/v2"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -58,7 +59,7 @@ func main() {
 	flag.StringVar(&cfg.ClientFriendlyName, "friendly_name", "testclient", "Client friendly name other that the assigned Id")
 	flag.StringVar(&cfg.ClientRegion, "client_region", "Beijing", "Client identify where it is located")
 	flag.IntVar(&cfg.InitialRequestTotalMachines, "request_machines", 2500, "Initial request of number of machines")
-	flag.IntVar(&cfg.RegionIdToWatch, "region_id_to_watch", -1, "Region id to watch")
+	flag.StringVar(&cfg.RegionIdToWatch, "region_id_to_watch", "", "Region id(s) to watch, separated with comma")
 	flag.StringVar(&regions, "request_regions", "Beijing", "list of regions, in comma separated string, to allocate the machines for the client")
 	flag.DurationVar(&testCfg.testDuration, "test_duration", 10*time.Minute, "Test duration, measured by number minutes of watch of node changes. default 10 minutes")
 	flag.StringVar(&testCfg.action, "action", "", "action to perform, can be register list or watch, default to register-list-watch")
@@ -82,11 +83,21 @@ func main() {
 	watchStats := stats.NewWatchStats()
 
 	hasRegionIdToWatch := true
-	var regionIdToWatch types.RegionName
-	if cfg.RegionIdToWatch == -1 {
+	var regionIdsToWatch map[types.RegionName]bool
+	if cfg.RegionIdToWatch == "" {
 		hasRegionIdToWatch = false
 	} else {
-		regionIdToWatch = types.RegionName(cfg.RegionIdToWatch)
+		idsToWatch := strings.Split(cfg.RegionIdToWatch, ",")
+		regionIdsToWatch = make(map[types.RegionName]bool, len(idsToWatch))
+		for i := 0; i < len(idsToWatch); i++ {
+			id, err := strconv.Atoi(idsToWatch[i])
+			if err != nil || i < 0 || i >= 5 { // currently only support 5 regions
+				klog.Infof("Invalid region_id_to_watch to watch (%v). Needs to be have format 0,1,2,3,4", cfg.RegionIdToWatch)
+				printUsage()
+				return
+			}
+			regionIdsToWatch[types.RegionName(id)] = true
+		}
 	}
 
 	switch testCfg.action {
@@ -108,13 +119,13 @@ func main() {
 		client.Id = clientId
 
 		crv := listNodes(client, client.Id, store, listStats, listOpts)
-		watchNodes(client, client.Id, crv, store, watchStats, hasRegionIdToWatch, regionIdToWatch)
+		watchNodes(client, client.Id, crv, store, watchStats, hasRegionIdToWatch, regionIdsToWatch)
 		printTestStats(registerStats, listStats, watchStats)
 	default:
 		clientId := registerClient(client, registerStats)
 		client.Id = clientId
 		crv := listNodes(client, client.Id, store, listStats, listOpts)
-		watchNodes(client, client.Id, crv, store, watchStats, hasRegionIdToWatch, regionIdToWatch)
+		watchNodes(client, client.Id, crv, store, watchStats, hasRegionIdToWatch, regionIdsToWatch)
 		printTestStats(registerStats, listStats, watchStats)
 	}
 
@@ -184,7 +195,7 @@ func listNodes(client rmsclient.RmsInterface, clientId string, store cache.Store
 }
 
 func watchNodes(client rmsclient.RmsInterface, clientId string, crv types.TransitResourceVersionMap, store cache.Store,
-	watchStats *stats.WatchStats, hasRegionToWatch bool, regionToWatch types.RegionName) {
+	watchStats *stats.WatchStats, hasRegionToWatch bool, regionsToWatch map[types.RegionName]bool) {
 	var start, end time.Time
 
 	klog.Infof("Watch resources update from service ...")
@@ -219,13 +230,15 @@ func watchNodes(client rmsclient.RmsInterface, clientId string, crv types.Transi
 				addWatchLatency(watchDelay, watchStats)
 				logIfProlonged(&record, watchDelay, watchStats)
 
-				if hasRegionToWatch && record.Node.GeoInfo.Region == regionToWatch {
-					regionEventCount++
-					if regionWatchStart == nil {
-						regionWatchStart = &currentTime
-						klog.Infof("[Throughput] Time to start getting event from region %v: %v", regionToWatch, regionWatchStart)
-					} else {
-						regionWatchEnd = &currentTime
+				if hasRegionToWatch {
+					if _, isOK := regionsToWatch[record.Node.GeoInfo.Region]; isOK {
+						regionEventCount++
+						if regionWatchStart == nil {
+							regionWatchStart = &currentTime
+							klog.Infof("[Throughput] Time to start getting event from region %v: %v", record.Node.GeoInfo.Region, regionWatchStart)
+						} else {
+							regionWatchEnd = &currentTime
+						}
 					}
 				}
 
@@ -252,7 +265,7 @@ func watchNodes(client rmsclient.RmsInterface, clientId string, crv types.Transi
 	watchStats.WatchDuration = end.Sub(start)
 	regionWatchDuration := regionWatchEnd.Sub(*regionWatchStart)
 	if hasRegionToWatch {
-		klog.Infof("[Throughput] Time to get last event from region %v: %v. Duration %v. Event count %v", regionToWatch, regionWatchEnd, regionWatchDuration, regionEventCount)
+		klog.Infof("[Throughput] Time to get last event from region %v: %v. Duration %v. Event count %v", regionsToWatch, regionWatchEnd, regionWatchDuration, regionEventCount)
 	}
 	return
 }

@@ -40,7 +40,7 @@ type Config struct {
 	RequestTimeout              time.Duration
 	ClientFriendlyName          string
 	ClientRegion                string
-	RegionIdToWatch             int
+	RegionIdToWatch             string
 	InitialRequestTotalMachines int
 	InitialRequestRegions       []string
 }
