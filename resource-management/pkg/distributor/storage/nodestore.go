@@ -36,16 +36,34 @@ const (
 	BatchPersistSize     = 100
 )
 
+// Maximal two levels:
+// 1. Original VS
+// 2. Splitted VirtualNodeStores
 type VirtualNodeStore struct {
-	mu              sync.RWMutex
+	mu sync.RWMutex
+
+	// node events belong to current VS
 	nodeEventByHash map[float64]*node.ManagedNodeEvent
-	lowerbound      float64 // inclusive
-	upperbound      float64 // exclusive
+	// lower bound for current VS - inclusive - immutable for top level VS
+	lowerbound float64
+	// upper bound for current VS - exclusive - immutable for top level VS
+	upperbound float64
+	// effective upper bound for top level VS - same for child VS
+	adjustedUpperBound float64
+
+	// empty for child VS
+	splittVirtualNodeStores []*VirtualNodeStore
+
+	// nil for top level VS
+	parentVirtualNodeStore *VirtualNodeStore
 
 	// one virtual store can only have nodes from one resource partition
 	location location.Location
 
-	clientId   string
+	// client current VS is assigned to
+	clientId string
+
+	// event queue that send node events to
 	eventQueue *cache.NodeEventQueue
 }
 
@@ -122,44 +140,45 @@ func (vs *VirtualNodeStore) GenerateBookmarkEvent() *node.ManagedNodeEvent {
 }
 
 // Input requested host count
-// return pointer to new virtual node store - splitted from current virtual node store
-func (vs *VirtualNodeStore) Split(requestedHostCount int) *VirtualNodeStore {
+func (vs *VirtualNodeStore) AdjustCapacity(requestedHostCount int) {
 	vs.mu.Lock()
 	defer vs.mu.Unlock()
 	currentSize := len(vs.nodeEventByHash)
 	if currentSize <= requestedHostCount {
 		klog.Errorf("Requested to split virtual node when capacity (%d) is less than or equal to requested host count (%d)", currentSize, requestedHostCount)
-		return nil
+		return
 	}
 
-	nodeHashes := make([]float64, currentSize)
-	index := 0
-	for k, _ := range vs.nodeEventByHash {
-		nodeHashes[index] = k
-		index++
-	}
-	sort.Float64s(nodeHashes)
-	newUBoundForCurrentVS := nodeHashes[requestedHostCount]
-	vs.upperbound = newUBoundForCurrentVS
+	// first splitted vs
+	if vs.parentVirtualNodeStore == nil && len(vs.splittVirtualNodeStores) == 0 {
+		nodeHashes := make([]float64, currentSize)
+		index := 0
+		for k, _ := range vs.nodeEventByHash {
+			nodeHashes[index] = k
+			index++
+		}
+		sort.Float64s(nodeHashes)
+		newUBoundForCurrentVS := nodeHashes[requestedHostCount]
+		vs.adjustedUpperBound = newUBoundForCurrentVS
 
-	// create new virtual node store
-	newVSStore := &VirtualNodeStore{
-		mu:              sync.RWMutex{},
-		nodeEventByHash: make(map[float64]*node.ManagedNodeEvent, currentSize-requestedHostCount),
-		lowerbound:      newUBoundForCurrentVS,
-		upperbound:      vs.upperbound,
-		location:        vs.location,
-	}
+		// create new virtual node store
+		newVSStore := &VirtualNodeStore{
+			mu:              sync.RWMutex{},
+			nodeEventByHash: make(map[float64]*node.ManagedNodeEvent, currentSize-requestedHostCount),
+			lowerbound:      newUBoundForCurrentVS,
+			upperbound:      vs.upperbound,
+			location:        vs.location,
+		}
 
-	// move nodes from existing vs to new vs
-	for i := requestedHostCount; i < currentSize; i++ {
-		nodeHashKey := nodeHashes[i]
-		newVSStore.nodeEventByHash[nodeHashKey] = vs.nodeEventByHash[nodeHashKey]
-		delete(vs.nodeEventByHash, nodeHashKey)
-	}
+		// move nodes from existing vs to new vs
+		for i := requestedHostCount; i < currentSize; i++ {
+			nodeHashKey := nodeHashes[i]
+			newVSStore.nodeEventByHash[nodeHashKey] = vs.nodeEventByHash[nodeHashKey]
+			delete(vs.nodeEventByHash, nodeHashKey)
+		}
 
-	// TODO Add new virtual node into store
-	return newVSStore
+		// Add new virtual node into store
+	}
 }
 
 type NodeStore struct {
