@@ -112,7 +112,7 @@ func TestSingleRPMutipleClients_Workflow(t *testing.T) {
 
 				assert.Nil(t, err)
 				assert.NotNil(t, latestRVs)
-				assert.True(t, len(nodes) >= tt.hostPerClient)
+				assert.Equal(t, tt.hostPerClient, len(nodes))
 				// t.Logf("Client %d %s latest rvs: %v.Total hosts: %d\n", i, clientId, latestRVs, len(nodes))
 				latestRVsByClient[i] = latestRVs
 				nodesByClient[i] = nodes
@@ -297,7 +297,7 @@ func TestMultipleRPsMutipleClients_Workflow(t *testing.T) {
 
 					assert.Nil(t, err)
 					assert.NotNil(t, latestRVs)
-					assert.True(t, len(nodes) >= tt.hostPerClient)
+					assert.Equal(t, tt.hostPerClient, len(nodes))
 					// t.Logf("Client %d %s latest rvs: %v.Total hosts: %d\n", i, clientId, latestRVs, len(nodes))
 					latestRVsByClient[i] = latestRVs
 					nodesByClient[i] = nodes

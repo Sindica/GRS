@@ -131,15 +131,21 @@ func (dis *ResourceDistributor) allocateNodesToClient(clientId string, requested
 	assignedHostCount := 0
 	hostAssignIsOK := false
 	for i := 0; i < len(storesToSelectInorder); i++ {
-		newHostCount := assignedHostCount + (*storesToSelectInorder[i]).GetHostNum()
+		candidateStore := storesToSelectInorder[i]
+
+		newHostCount := assignedHostCount + candidateStore.GetHostNum()
 		if newHostCount <= requestedHostNum {
-			selectedStores = append(selectedStores, storesToSelectInorder[i])
+			selectedStores = append(selectedStores, candidateStore)
 			assignedHostCount = newHostCount
 			if newHostCount == requestedHostNum {
 				hostAssignIsOK = true
 				break
 			}
 		} else { // split vNode
+			candidateStore.AdjustCapacity(candidateStore, requestedHostNum-assignedHostCount)
+			selectedStores = append(selectedStores, candidateStore)
+			assignedHostCount = requestedHostNum
+			hostAssignIsOK = true
 			break
 		}
 	}

@@ -64,6 +64,8 @@ func TestAdjustCapacity_1stSplit(t *testing.T) {
 			assert.Equal(t, vsPointerOld, vs)
 			assert.Nil(t, vs.splittVirtualNodeStores[0].parentVirtualNodeStore)
 			assert.Equal(t, vs, vs.splittVirtualNodeStores[1].parentVirtualNodeStore)
+
+			assert.Equal(t, len(vs.nodeEventByHash), vs.GetHostNum())
 		}
 	}
 }

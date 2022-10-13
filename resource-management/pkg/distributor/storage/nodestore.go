@@ -17,6 +17,8 @@ limitations under the License.
 package storage
 
 import (
+	"bytes"
+	"fmt"
 	"k8s.io/klog/v2"
 	"math"
 	"sort"
@@ -330,6 +332,21 @@ func (vs *VirtualNodeStore) Swap(i, j int) {
 	vs.splittVirtualNodeStores[i], vs.splittVirtualNodeStores[j] = vs.splittVirtualNodeStores[j], vs.splittVirtualNodeStores[i]
 }
 
+func (vs *VirtualNodeStore) GetBoundaris() string {
+	vs.mu.RLock()
+	defer vs.mu.RUnlock()
+
+	result := new(bytes.Buffer)
+	result.WriteString(fmt.Sprintf("original boundary (%v, %v), adjusted boundary (%v, %v)\n",
+		vs.lowerbound, vs.upperbound, vs.adjustedLowerBound, vs.adjustedUpperBound))
+	for i := 0; i < len(vs.splittVirtualNodeStores); i++ {
+		result.WriteString(fmt.Sprintf("Child store %d, boundary (%v, %v)\n",
+			i, vs.splittVirtualNodeStores[i].adjustedLowerBound, vs.splittVirtualNodeStores[i].adjustedUpperBound))
+	}
+
+	return string(result.Bytes())
+}
+
 type NodeStore struct {
 	// granularity of the ring - degree for each virtual node managed arc
 	granularOfRing float64
@@ -571,7 +588,23 @@ func (ns *NodeStore) getNodeHash(node *node.ManagedNodeEvent) (float64, int) {
 func (ns *NodeStore) getVirtualNodeStore(node *node.ManagedNodeEvent) (float64, int, *VirtualNodeStore) {
 	hashValue, ringId := ns.getNodeHash(node)
 	virtualNodeIndex := int(math.Floor(hashValue / ns.granularOfRing))
-	return hashValue, ringId, (*ns.vNodeStores)[virtualNodeIndex]
+	parentVNS := (*ns.vNodeStores)[virtualNodeIndex]
+	if len(parentVNS.splittVirtualNodeStores) > 0 && (hashValue < parentVNS.adjustedLowerBound || hashValue >= parentVNS.adjustedUpperBound) {
+		// prevent node splitting happening during search
+		parentVNS.mu.RLock()
+		defer parentVNS.mu.RUnlock()
+		// node shall locate in child VirtualNodeStore
+		// linear search first, might need to change to binary search based on performance
+		for i := 0; i < len(parentVNS.splittVirtualNodeStores); i++ {
+			if hashValue >= parentVNS.splittVirtualNodeStores[i].adjustedLowerBound && hashValue < parentVNS.splittVirtualNodeStores[i].adjustedUpperBound {
+				return hashValue, ringId, parentVNS.splittVirtualNodeStores[i]
+			}
+		}
+
+		klog.Errorf("Could not find node position in virtual node stores. HashValue %v, VS %s", hashValue, parentVNS.GetBoundaris())
+	}
+
+	return hashValue, ringId, parentVNS
 }
 
 func (ns *NodeStore) addNodeToRing(nodeEvent *node.ManagedNodeEvent) (isNewNode bool) {

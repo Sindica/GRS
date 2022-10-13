@@ -370,7 +370,7 @@ func TestRegisterClient_WithinLimit(t *testing.T) {
 			hostCount += vs.GetHostNum()
 		}
 		t.Logf("Total %d hosts are assigned to client %s\nTook %v to register the client.\n", hostCount, clientId, duration)
-		assert.True(t, hostCount >= requestedHostNum, "Assigned host number %d is less than requested %d", hostCount, requestedHostNum)
+		assert.Equal(t, requestedHostNum, hostCount, "Assigned host number %d is less than requested %d", hostCount, requestedHostNum)
 
 		// check nodes number with list nodes
 		nodes, _, err := distributor.ListNodesForClient(clientId)
@@ -411,7 +411,7 @@ func TestRegistrationWorkflow(t *testing.T) {
 	nodes, latestRVs, err := distributor.ListNodesForClient(clientId)
 	assert.Nil(t, err)
 	assert.NotNil(t, latestRVs)
-	assert.True(t, len(nodes) >= 500)
+	assert.Equal(t, requestedHostNum, len(nodes))
 	t.Logf("Latest rvs: %v. Total hosts: %d\n", latestRVs, len(nodes))
 	// check each node event
 	nodeIds := make(map[string]bool)
@@ -536,7 +536,7 @@ func TestRegistration5MCase(t *testing.T) {
 
 						assert.Nil(t, err2)
 						assert.NotNil(t, latestRVs)
-						assert.True(t, len(nodes) >= tt.hostPerScheduler)
+						assert.Equal(t, tt.hostPerScheduler, len(nodes))
 						klog.Infof("List nodes for client %s took %v", clientId, duration)
 					}
 
@@ -576,7 +576,7 @@ func TestWatchRenewal(t *testing.T) {
 	nodes, latestRVs, err := distributor.ListNodesForClient(clientId)
 	assert.Nil(t, err)
 	assert.NotNil(t, latestRVs)
-	assert.True(t, len(nodes) >= 500)
+	assert.Equal(t, requestedHostNum, len(nodes))
 	t.Logf("Latest rvs: %v. Total hosts: %d\n", latestRVs, len(nodes))
 	// check each node event
 	nodeIds := make(map[string]bool)
