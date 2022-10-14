@@ -38,33 +38,24 @@ func TestAdjustCapacity_1stSplit(t *testing.T) {
 			upperBoundOld := vs.upperbound
 			vsPointerOld := vs
 
-			vs.AdjustCapacity(vs, j)
+			vs.RequestCapacity(j)
 
 			// check result
 			assert.Nil(t, vs.parentVirtualNodeStore)
 			assert.Equal(t, j, len(vs.nodeEventByHash))
+			assert.True(t, vs.IsValidTopVirtualNodeStore())
 
 			assert.Equal(t, 2, len(vs.splittVirtualNodeStores))
 			assert.NotEqual(t, vs.splittVirtualNodeStores[0], vs.splittVirtualNodeStores[1])
 			assert.Equal(t, i, len(vs.splittVirtualNodeStores[0].nodeEventByHash)+len(vs.splittVirtualNodeStores[1].nodeEventByHash))
 
-			assert.True(t, vs.splittVirtualNodeStores[0].adjustedLowerBound < vs.splittVirtualNodeStores[1].adjustedLowerBound)
-			assert.True(t, vs.splittVirtualNodeStores[0].adjustedUpperBound < vs.splittVirtualNodeStores[1].adjustedUpperBound)
-			assert.Equal(t, vs.splittVirtualNodeStores[0].adjustedUpperBound, vs.splittVirtualNodeStores[1].adjustedLowerBound)
-
 			// init vs has immutable lower & upper bound
 			assert.Equal(t, lowerBoundOld, vs.lowerbound)
 			assert.Equal(t, upperBoundOld, vs.upperbound)
-			assert.Equal(t, vs.lowerbound, vs.splittVirtualNodeStores[0].adjustedLowerBound)
-			assert.Equal(t, vs.upperbound, vs.splittVirtualNodeStores[1].adjustedUpperBound)
 			vs.mu.Lock()
 			vs.mu.Unlock()
 
-			// has one and only one store as parent
 			assert.Equal(t, vsPointerOld, vs)
-			assert.Nil(t, vs.splittVirtualNodeStores[0].parentVirtualNodeStore)
-			assert.Equal(t, vs, vs.splittVirtualNodeStores[1].parentVirtualNodeStore)
-
 			assert.Equal(t, len(vs.nodeEventByHash), vs.GetHostNum())
 		}
 	}

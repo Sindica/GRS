@@ -78,12 +78,95 @@ func (vs *VirtualNodeStore) GetHostNum() int {
 	return len(vs.nodeEventByHash)
 }
 
+func (vs *VirtualNodeStore) GetFreeHostNum() int {
+	if len(vs.splittVirtualNodeStores) > 0 {
+		freeHostCount := 0
+		for i := 0; i < len(vs.splittVirtualNodeStores); i++ {
+			if !vs.splittVirtualNodeStores[i].IsAssignedToClient() {
+				vs.splittVirtualNodeStores[i].mu.RLock()
+				freeHostCount += len(vs.splittVirtualNodeStores[i].nodeEventByHash)
+				vs.splittVirtualNodeStores[i].mu.RUnlock()
+			}
+		}
+		return freeHostCount
+	} else if vs.IsAssignedToClient() {
+		return 0
+	} else {
+		return vs.GetHostNum()
+	}
+}
+
+func (vs *VirtualNodeStore) GetAllFreeChildStores() []*VirtualNodeStore {
+	if len(vs.splittVirtualNodeStores) > 0 {
+		freeStores := make([]*VirtualNodeStore, 0)
+		for i := 0; i < len(vs.splittVirtualNodeStores); i++ {
+			if !vs.splittVirtualNodeStores[i].IsAssignedToClient() {
+				freeStores = append(freeStores, vs.splittVirtualNodeStores[i])
+			}
+		}
+		return freeStores
+	} else if vs.IsAssignedToClient() {
+		return nil
+	} else {
+		return []*VirtualNodeStore{vs}
+	}
+}
+
+func (vs *VirtualNodeStore) IsValidTopVirtualNodeStore() bool {
+	if vs.parentVirtualNodeStore != nil {
+		return false
+	}
+
+	storeCount := len(vs.splittVirtualNodeStores)
+	if storeCount == 0 {
+		return true
+	} else if storeCount == 1 {
+		return false
+	}
+
+	// check lower/upperbound of top vNode
+	if vs.lowerbound != vs.splittVirtualNodeStores[0].adjustedLowerBound || vs.upperbound != vs.splittVirtualNodeStores[storeCount-1].adjustedUpperBound {
+		return false
+	}
+	// check adjusted lower/upperbound
+	if vs.splittVirtualNodeStores[0].adjustedLowerBound >= vs.splittVirtualNodeStores[0].adjustedUpperBound {
+		return false
+	}
+	isParentVNodeFound := false
+	previousUpperBound := vs.splittVirtualNodeStores[0].adjustedUpperBound
+	for i := 0; i < storeCount; i++ {
+		currentVNode := vs.splittVirtualNodeStores[i]
+		if currentVNode.parentVirtualNodeStore == nil {
+			if !isParentVNodeFound {
+				isParentVNodeFound = true
+			} else {
+				return false
+			}
+			if i > 0 {
+				if previousUpperBound != currentVNode.adjustedLowerBound || currentVNode.adjustedLowerBound >= currentVNode.adjustedUpperBound {
+					return false
+				}
+				previousUpperBound = currentVNode.adjustedUpperBound
+			}
+		}
+	}
+
+	return true
+}
+
 func (vs *VirtualNodeStore) GetLocation() location.Location {
 	return vs.location
 }
 
 func (vs *VirtualNodeStore) GetAssignedClient() string {
 	return vs.clientId
+}
+
+func (vs *VirtualNodeStore) IsAssignedToClient() bool {
+	if vs.clientId != "" {
+		return true
+	}
+	return false
 }
 
 func (vs *VirtualNodeStore) AssignToClient(clientId string, eventQueue *cache.NodeEventQueue) bool {
@@ -104,8 +187,15 @@ func (vs *VirtualNodeStore) Release() {
 	vs.clientId = ""
 }
 
-func (vs *VirtualNodeStore) GetRange() (float64, float64) {
+func (vs *VirtualNodeStore) GetOriginalRange() (float64, float64) {
 	return vs.lowerbound, vs.upperbound
+}
+
+func (vs *VirtualNodeStore) GetAdjustedRange() (float64, float64) {
+	if vs.parentVirtualNodeStore == nil && len(vs.splittVirtualNodeStores) == 0 { // top level vNode never being splitted
+		return vs.GetOriginalRange()
+	}
+	return vs.adjustedLowerBound, vs.adjustedUpperBound
 }
 
 // Snapshot generates a list of node for the List() call from a client, and a current RV map to client
@@ -146,30 +236,25 @@ func (vs *VirtualNodeStore) GenerateBookmarkEvent() *node.ManagedNodeEvent {
 
 // Input requested host count
 // TODO: error cases
-func (vs *VirtualNodeStore) AdjustCapacity(vNStoAdjust *VirtualNodeStore, requestedHostCount int) {
-	vs.mu.Lock()
-	defer vs.mu.Unlock()
+func (vs *VirtualNodeStore) RequestCapacity(requestedHostCount int) []*VirtualNodeStore {
+	vs.mu.RLock()
+	defer vs.mu.RUnlock()
 
-	currentSize := len(vNStoAdjust.nodeEventByHash)
-	if currentSize <= requestedHostCount {
-		klog.Errorf("Requested to split virtual node when capacity (%d) is less than or equal to requested host count (%d)", currentSize, requestedHostCount)
-		return
+	freeHostNum := vs.GetFreeHostNum()
+	if freeHostNum <= requestedHostCount {
+		klog.Errorf("Free host count (%d) is less than or equal to requested host count (%d)", freeHostNum, requestedHostCount)
+		return nil
 	}
 	if vs.parentVirtualNodeStore != nil {
-		klog.Error("VS capacity adjustment can only be done from parent node")
-		return
+		klog.Error("Request free host can only be done from parent node")
+		return nil
 	}
 
 	if len(vs.splittVirtualNodeStores) == 0 { // first splitted vs
-		if vs != vNStoAdjust {
-			klog.Error("Invalid virtual node status: first time split with unmatched virtual node stores")
-			return
-		}
-
 		// create new virtual node store
 		newVSStore := &VirtualNodeStore{
 			mu:                     sync.RWMutex{},
-			nodeEventByHash:        make(map[float64]*node.ManagedNodeEvent, currentSize-requestedHostCount),
+			nodeEventByHash:        make(map[float64]*node.ManagedNodeEvent, freeHostNum-requestedHostCount),
 			location:               vs.location,
 			parentVirtualNodeStore: vs,
 			adjustedLowerBound:     vs.lowerbound,
@@ -177,23 +262,43 @@ func (vs *VirtualNodeStore) AdjustCapacity(vNStoAdjust *VirtualNodeStore, reques
 		}
 		vs.adjustedLowerBound = vs.lowerbound
 		vs.adjustedUpperBound = vs.upperbound
-		vs.moveNodes(vs, newVSStore, currentSize-requestedHostCount, true)
+		vs.moveNodes(vs, newVSStore, freeHostNum-requestedHostCount, true)
 
 		// Add new virtual node into store
 		vs.splittVirtualNodeStores = make([]*VirtualNodeStore, 2)
 		vs.splittVirtualNodeStores[0] = vs
 		vs.splittVirtualNodeStores[1] = newVSStore
+		return []*VirtualNodeStore{vs}
 	} else {
-		currentIndex := vs.findIndexOfVS(vNStoAdjust)
-		if currentIndex < 0 {
-			klog.Error("Invalid VirtualNodeStore config")
-			return
+		freeStores := vs.GetAllFreeChildStores()
+		candidateStores := make([]*VirtualNodeStore, 0)
+		count := 0
+		for i := 0; i < len(freeStores); i++ {
+			newHostCount := count + freeStores[i].GetHostNum()
+			if newHostCount == requestedHostCount {
+				return append(candidateStores, freeStores[i])
+			} else if newHostCount < requestedHostCount {
+				candidateStores = append(candidateStores, freeStores[i])
+			} else {
+				newVSStore := &VirtualNodeStore{
+					mu:                     sync.RWMutex{},
+					nodeEventByHash:        make(map[float64]*node.ManagedNodeEvent, newHostCount-requestedHostCount),
+					location:               vs.location,
+					parentVirtualNodeStore: vs,
+					adjustedLowerBound:     freeStores[i].adjustedLowerBound,
+					adjustedUpperBound:     freeStores[i].adjustedUpperBound,
+				}
+				vs.moveNodes(freeStores[i], newVSStore, newHostCount-requestedHostCount, true)
+
+				vs.splittVirtualNodeStores = append(vs.splittVirtualNodeStores, newVSStore)
+				sort.Sort(vs)
+				return append(candidateStores, freeStores[i])
+			}
 		}
 
-		newVSStore, countFromHighEnd := vs.findAdjacentVacantStore(currentIndex)
-		vs.moveNodes(vNStoAdjust, newVSStore, currentSize-requestedHostCount, countFromHighEnd)
-		// sort splittVirtualNodeStores by range
-		sort.Sort(vs)
+		// this should never be reached
+		klog.Error("Unexpected statement reach. Free host #: %v, requested host #: %v", freeHostNum, requestedHostCount)
+		return candidateStores
 	}
 }
 
@@ -427,7 +532,7 @@ func (ns *NodeStore) CheckFreeCapacity(requestedHostNum int) bool {
 	defer ns.nsLock.Unlock()
 	allocatableHostNum := 0
 	for _, vs := range *ns.vNodeStores {
-		allocatableHostNum += vs.GetHostNum()
+		allocatableHostNum += vs.GetFreeHostNum()
 		if allocatableHostNum >= requestedHostNum {
 			return true
 		}

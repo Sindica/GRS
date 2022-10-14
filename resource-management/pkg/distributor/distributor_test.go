@@ -86,7 +86,7 @@ func TestDistributorInit(t *testing.T) {
 		store := (*defaultNodeStores)[i]
 		assert.Equal(t, 0, store.GetHostNum(), "Initial host number should be 0")
 		assert.Equal(t, "", store.GetAssignedClient(), "Virtual store should not be assigned to any client")
-		lowerBound, upperBound := store.GetRange()
+		lowerBound, upperBound := store.GetOriginalRange()
 		assert.Equal(t, lower, lowerBound, "Expecting lower bound %f but got %f. store id %d, hash range (%f, %f]", lower, lowerBound, i, lowerBound, upperBound)
 		assert.NotEqual(t, lowerBound, upperBound, "Expecting lower bound not equal to upper bound for virtual store %d. Got hash range (%f, %f]", i, lowerBound, upperBound)
 		lower = upperBound
@@ -337,45 +337,68 @@ func TestRegisterClient_ErrorCases(t *testing.T) {
 }
 
 func TestRegisterClient_WithinLimit(t *testing.T) {
-	distributor := setUp()
-	defer tearDown()
+	for v := 2; v <= 500; v++ {
+		virutalStoreNumPerResourcePartition = v
+		distributor := setUp()
 
-	result, rvMap := distributor.ProcessEvents(generateAddNodeEvent(10000, defaultLocBeijing_RP1))
-	assert.True(t, result)
-	assert.NotNil(t, rvMap)
-	assert.Equal(t, 10000, distributor.defaultNodeStore.GetTotalHostNum())
+		totalHostCount := 10000
+		result, rvMap := distributor.ProcessEvents(generateAddNodeEvent(totalHostCount, defaultLocBeijing_RP1))
+		assert.True(t, result)
+		assert.NotNil(t, rvMap)
+		assert.Equal(t, totalHostCount, distributor.defaultNodeStore.GetTotalHostNum())
 
-	requestedHostNum := 500
-	for i := 0; i < 10; i++ {
-		start := time.Now()
-		client := types.Client{ClientId: uuid.New().String(), Resource: types.ResourceRequest{TotalMachines: requestedHostNum}, ClientInfo: types.ClientInfoType{}}
-		err := distributor.RegisterClient(&client)
-		duration := time.Since(start)
+		allHosts := make(map[string]bool, 0)
+		requestedHostNum := 500
+		for i := 0; i < 20; i++ {
+			start := time.Now()
+			client := types.Client{ClientId: uuid.New().String(), Resource: types.ResourceRequest{TotalMachines: requestedHostNum}, ClientInfo: types.ClientInfoType{}}
+			err := distributor.RegisterClient(&client)
+			duration := time.Since(start)
 
-		clientId := client.ClientId
-		assert.NotNil(t, clientId, "Expecting not nil client id")
-		assert.False(t, clientId == "", "Expecting non empty client id")
-		assert.Nil(t, err, "Expecting nil error")
+			clientId := client.ClientId
+			assert.NotNil(t, clientId, "Expecting not nil client id")
+			assert.False(t, clientId == "", "Expecting non empty client id")
+			assert.Nil(t, err, "Expecting nil error")
 
-		// check virtual node assignment
-		virtualStoresAssignedToClient, isOK := distributor.clientToStores[clientId]
-		assert.True(t, isOK, "Expecting get virtual stores assigned to client %s", clientId)
-		assert.True(t, len(virtualStoresAssignedToClient) > 0, "Expecting get non empty virtual stores assigned to client %s", clientId)
-		hostCount := 0
-		for i := 0; i < len(virtualStoresAssignedToClient); i++ {
-			vs := virtualStoresAssignedToClient[i]
-			assert.Equal(t, clientId, vs.GetAssignedClient(), "Unexpected virtual store client id %s", clientId)
-			lower, upper := vs.GetRange()
-			t.Logf("Virtual node store (%f, %f] is assigned to client %s, host number %d\n", lower, upper, clientId, vs.GetHostNum())
-			hostCount += vs.GetHostNum()
+			// check virtual node assignment
+			virtualStoresAssignedToClient, isOK := distributor.clientToStores[clientId]
+			assert.True(t, isOK, "Expecting get virtual stores assigned to client %s", clientId)
+			assert.True(t, len(virtualStoresAssignedToClient) > 0, "Expecting get non empty virtual stores assigned to client %s", clientId)
+			hostCount := 0
+			for j := 0; j < len(virtualStoresAssignedToClient); j++ {
+				vs := virtualStoresAssignedToClient[j]
+				assert.Equal(t, clientId, vs.GetAssignedClient(), "Unexpected virtual store client id %s", clientId)
+				lower, upper := vs.GetAdjustedRange()
+				t.Logf("Virtual node store (%f, %f] is assigned to client %s, host number %d. vNodePerPR %v", lower, upper, clientId, vs.GetHostNum(), virutalStoreNumPerResourcePartition)
+				if !vs.IsValidTopVirtualNodeStore() {
+					t.Fatalf("Invalid vNode store for client %v", clientId)
+				}
+				hostCount += vs.GetHostNum()
+			}
+			t.Logf("Total %d hosts are assigned to client %s\nTook %v to register the client.\n", hostCount, clientId, duration)
+			if requestedHostNum != hostCount {
+				assert.Equal(t, requestedHostNum, hostCount, "Assigned host number %d is not equal to requested %d", hostCount, requestedHostNum)
+				t.Fatalf("virutalStoreNumPerResourcePartition = %d, client count %v", virutalStoreNumPerResourcePartition, i)
+			}
+
+			// check nodes number with list nodes
+			nodes, _, err := distributor.ListNodesForClient(clientId)
+			assert.Nil(t, err, "List nodes by client id should be successful")
+			assert.Equal(t, hostCount, len(nodes), "Node count from virtual store should be same as list nodes")
+
+			// check node allocation and make sure there is no duplicates
+			for _, n := range nodes {
+				if _, isOK := allHosts[n.Id]; isOK {
+					t.Fatalf("Host was assigned to another client but reassigned again, id %v", n.Id)
+				} else {
+					allHosts[n.Id] = true
+				}
+			}
 		}
-		t.Logf("Total %d hosts are assigned to client %s\nTook %v to register the client.\n", hostCount, clientId, duration)
-		assert.Equal(t, requestedHostNum, hostCount, "Assigned host number %d is less than requested %d", hostCount, requestedHostNum)
 
-		// check nodes number with list nodes
-		nodes, _, err := distributor.ListNodesForClient(clientId)
-		assert.Nil(t, err, "List nodes by client id should be successful")
-		assert.Equal(t, hostCount, len(nodes), "Node count from virtual store should be same as list nodes")
+		assert.Equal(t, totalHostCount, len(allHosts))
+
+		tearDown()
 	}
 }
 

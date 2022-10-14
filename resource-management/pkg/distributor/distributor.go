@@ -117,7 +117,7 @@ func (dis *ResourceDistributor) allocateNodesToClient(clientId string, requested
 	allStores := dis.defaultNodeStore.GetVirtualStores()
 	freeStores := make(map[*storage.VirtualNodeStore]bool)
 	for _, vs := range *allStores {
-		if vs.GetAssignedClient() == "" && vs.GetHostNum() > 0 {
+		if vs.GetFreeHostNum() > 0 {
 			freeStores[vs] = true
 		}
 	}
@@ -133,18 +133,18 @@ func (dis *ResourceDistributor) allocateNodesToClient(clientId string, requested
 	for i := 0; i < len(storesToSelectInorder); i++ {
 		candidateStore := storesToSelectInorder[i]
 
-		newHostCount := assignedHostCount + candidateStore.GetHostNum()
+		newHostCount := assignedHostCount + candidateStore.GetFreeHostNum()
 		if newHostCount <= requestedHostNum {
-			selectedStores = append(selectedStores, candidateStore)
+			selectedStores = append(selectedStores, candidateStore.GetAllFreeChildStores()...)
 			assignedHostCount = newHostCount
 			if newHostCount == requestedHostNum {
 				hostAssignIsOK = true
 				break
 			}
 		} else { // split vNode
-			candidateStore.AdjustCapacity(candidateStore, requestedHostNum-assignedHostCount)
-			selectedStores = append(selectedStores, candidateStore)
-			assignedHostCount = requestedHostNum
+			requestedStores := candidateStore.RequestCapacity(requestedHostNum - assignedHostCount)
+			selectedStores = append(selectedStores, requestedStores...)
+			assignedHostCount += candidateStore.GetHostNum()
 			hostAssignIsOK = true
 			break
 		}
@@ -302,7 +302,7 @@ func (dis *ResourceDistributor) persistVirtualNodesAssignment(clientId string, a
 		vNodeToSave := &store.VirtualNodeConfig{
 			Location: s.GetLocation(),
 		}
-		vNodeToSave.Lowerbound, vNodeToSave.Upperbound = s.GetRange()
+		vNodeToSave.Lowerbound, vNodeToSave.Upperbound = s.GetOriginalRange()
 		vNodeConfigs[i] = vNodeToSave
 	}
 	assignment := &store.VirtualNodeAssignment{
