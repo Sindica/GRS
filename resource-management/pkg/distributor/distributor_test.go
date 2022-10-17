@@ -337,7 +337,9 @@ func TestRegisterClient_ErrorCases(t *testing.T) {
 }
 
 func TestRegisterClient_WithinLimit(t *testing.T) {
-	for v := 2; v <= 500; v++ {
+	vNodeNumberPerRPToTest := []int{2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 50, 51, 100, 101, 200, 201, 500, 501}
+	for _, v := range vNodeNumberPerRPToTest {
+		t.Logf("Test register client with virutalStoreNumPerResourcePartition = %d", v)
 		virutalStoreNumPerResourcePartition = v
 		distributor := setUp()
 
@@ -370,7 +372,7 @@ func TestRegisterClient_WithinLimit(t *testing.T) {
 				assert.Equal(t, clientId, vs.GetAssignedClient(), "Unexpected virtual store client id %s", clientId)
 				lower, upper := vs.GetAdjustedRange()
 				t.Logf("Virtual node store (%f, %f] is assigned to client %s, host number %d. vNodePerPR %v", lower, upper, clientId, vs.GetHostNum(), virutalStoreNumPerResourcePartition)
-				if !vs.IsValidTopVirtualNodeStore() {
+				if !vs.IsValidVirtualNodeStore() {
 					t.Fatalf("Invalid vNode store for client %v", clientId)
 				}
 				hostCount += vs.GetHostNum()

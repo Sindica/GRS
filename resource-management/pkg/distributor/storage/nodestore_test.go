@@ -43,7 +43,7 @@ func TestAdjustCapacity_1stSplit(t *testing.T) {
 			// check result
 			assert.Nil(t, vs.parentVirtualNodeStore)
 			assert.Equal(t, j, len(vs.nodeEventByHash))
-			assert.True(t, vs.IsValidTopVirtualNodeStore())
+			assert.True(t, vs.IsValidVirtualNodeStore())
 
 			assert.Equal(t, 2, len(vs.splittVirtualNodeStores))
 			assert.NotEqual(t, vs.splittVirtualNodeStores[0], vs.splittVirtualNodeStores[1])

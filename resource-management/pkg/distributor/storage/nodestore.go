@@ -112,9 +112,12 @@ func (vs *VirtualNodeStore) GetAllFreeChildStores() []*VirtualNodeStore {
 	}
 }
 
-func (vs *VirtualNodeStore) IsValidTopVirtualNodeStore() bool {
+func (vs *VirtualNodeStore) IsValidVirtualNodeStore() bool {
 	if vs.parentVirtualNodeStore != nil {
-		return false
+		if vs.parentVirtualNodeStore.parentVirtualNodeStore != nil { // Only two levels are allowed
+			return false
+		}
+		return vs.parentVirtualNodeStore.IsValidVirtualNodeStore()
 	}
 
 	storeCount := len(vs.splittVirtualNodeStores)
@@ -142,16 +145,16 @@ func (vs *VirtualNodeStore) IsValidTopVirtualNodeStore() bool {
 			} else {
 				return false
 			}
-			if i > 0 {
-				if previousUpperBound != currentVNode.adjustedLowerBound || currentVNode.adjustedLowerBound >= currentVNode.adjustedUpperBound {
-					return false
-				}
-				previousUpperBound = currentVNode.adjustedUpperBound
+		}
+		if i > 0 {
+			if previousUpperBound != currentVNode.adjustedLowerBound || currentVNode.adjustedLowerBound >= currentVNode.adjustedUpperBound {
+				return false
 			}
+			previousUpperBound = currentVNode.adjustedUpperBound
 		}
 	}
 
-	return true
+	return isParentVNodeFound
 }
 
 func (vs *VirtualNodeStore) GetLocation() location.Location {
