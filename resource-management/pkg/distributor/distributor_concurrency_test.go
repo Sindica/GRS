@@ -52,17 +52,17 @@ func TestSingleRPMutipleClients_Workflow(t *testing.T) {
 			updateEventNum: 10000,
 		},
 		{
-			name:           "Test 10K nodes with 5 clients each has 500 hosts, each got 100K update events",
+			name:           "Test 10K nodes with 20 clients each has 500 hosts, each got 100K update events",
 			nodeNum:        10000,
-			clientNum:      5,
+			clientNum:      20,
 			hostPerClient:  500,
 			updateEventNum: 100000,
 		},
 		{
-			name:           "Test 1M nodes with 50 clients each has 15000 hosts, each got 100K update events",
+			name:           "Test 1M nodes with 50 clients each has 20000 hosts, each got 100K update events",
 			nodeNum:        1000000,
 			clientNum:      50,
-			hostPerClient:  15000,
+			hostPerClient:  20000,
 			updateEventNum: 100000,
 		},
 	}
@@ -217,13 +217,13 @@ func TestMultipleRPsMutipleClients_Workflow(t *testing.T) {
 			updateEventNum: 10000,
 		},
 		{
-			name:           "Test 6 region, each has 20 RPs, 40K hosts per RP, 4.8M nodes with 200 clients, each got 20K hosts, 20K update events",
-			regionNum:      6,
-			rpNum:          20,
-			hostPerRP:      40000,
-			clientNum:      200,
-			hostPerClient:  20000,
-			updateEventNum: 20000,
+			name:           "Test 5 region, each has 40 RPs, 25K hosts per RP, 5M nodes with 100 clients, each got 50K hosts, 50K update events",
+			regionNum:      5,
+			rpNum:          40,
+			hostPerRP:      25000,
+			clientNum:      100,
+			hostPerClient:  50000,
+			updateEventNum: 50000,
 		},
 	}
 

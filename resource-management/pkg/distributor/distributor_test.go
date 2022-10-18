@@ -570,7 +570,7 @@ func TestRegistration5MCase(t *testing.T) {
 			}
 
 			wg.Wait()
-			assert.Equal(t, 1, totalErrors)
+			assert.Equal(t, 0, totalErrors)
 			t.Logf("%s succeed", tt.name)
 		})
 	}
