@@ -60,6 +60,7 @@ func main() {
 	flag.StringVar(&cfg.ClientRegion, "client_region", "Beijing", "Client identify where it is located")
 	flag.IntVar(&cfg.InitialRequestTotalMachines, "request_machines", 2500, "Initial request of number of machines")
 	flag.StringVar(&cfg.RegionIdToWatch, "region_id_to_watch", "", "Region id(s) to watch, separated with comma")
+	flag.BoolVar(&cfg.CaptureDetailedLog, "capture_detailed_log", false, "Write selected log")
 	flag.StringVar(&regions, "request_regions", "Beijing", "list of regions, in comma separated string, to allocate the machines for the client")
 	flag.DurationVar(&testCfg.testDuration, "test_duration", 10*time.Minute, "Test duration, measured by number minutes of watch of node changes. default 10 minutes")
 	flag.StringVar(&testCfg.action, "action", "", "action to perform, can be register list or watch, default to register-list-watch")
@@ -118,13 +119,13 @@ func main() {
 		clientId := registerClient(client, registerStats)
 		client.Id = clientId
 		crv := listNodes(client, client.Id, store, listStats, listOpts)
-		watchNodes(client, client.Id, crv, store, watchStats, hasRegionIdToWatch, regionIdsToWatch)
+		watchNodes(client, client.Id, crv, store, watchStats, hasRegionIdToWatch, regionIdsToWatch, cfg.CaptureDetailedLog)
 		printTestStats(registerStats, listStats, watchStats)
 	default:
 		clientId := registerClient(client, registerStats)
 		client.Id = clientId
 		crv := listNodes(client, client.Id, store, listStats, listOpts)
-		watchNodes(client, client.Id, crv, store, watchStats, hasRegionIdToWatch, regionIdsToWatch)
+		watchNodes(client, client.Id, crv, store, watchStats, hasRegionIdToWatch, regionIdsToWatch, cfg.CaptureDetailedLog)
 		printTestStats(registerStats, listStats, watchStats)
 	}
 
@@ -194,7 +195,7 @@ func listNodes(client rmsclient.RmsInterface, clientId string, store cache.Store
 }
 
 func watchNodes(client rmsclient.RmsInterface, clientId string, crv types.TransitResourceVersionMap, store cache.Store,
-	watchStats *stats.WatchStats, hasRegionToWatch bool, regionsToWatch map[types.RegionName]bool) {
+	watchStats *stats.WatchStats, hasRegionToWatch bool, regionsToWatch map[types.RegionName]bool, captureDetailedLog bool) {
 	var start, end time.Time
 
 	klog.V(3).Infof("Watch resources update from service ...")
@@ -225,6 +226,9 @@ func watchNodes(client rmsclient.RmsInterface, clientId string, crv types.Transi
 				}
 				currentTime := time.Now().UTC()
 				watchDelay := currentTime.Sub(record.Node.LastUpdatedTime)
+				if captureDetailedLog {
+					klog.Infof("[Metrics][Detail] node %v watch delay %v", record.Node.Id, watchDelay)
+				}
 				addWatchLatency(watchDelay, watchStats)
 				logIfProlonged(&record, watchDelay, watchStats)
 

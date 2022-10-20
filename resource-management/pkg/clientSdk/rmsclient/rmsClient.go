@@ -42,7 +42,8 @@ type Config struct {
 	ClientRegion                string
 	RegionIdToWatch             string
 	InitialRequestTotalMachines int
-	InitialRequestRegions       []string
+	InitialRequestRegions []string
+	CaptureDetailedLog    bool
 }
 
 // ListOptions contains optional settings for List nodes
